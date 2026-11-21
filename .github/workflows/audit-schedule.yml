@@ -1,0 +1,177 @@
+name: audit-schedule
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+      timezone: Europe/Moscow
+  workflow_dispatch:
+    inputs:
+      training_finding:
+        description: 'Явно помеченная учебная находка для демонстрации создания issue (не подтверждённый дефект)'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: audit-schedule
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+      TRAINING_FINDING: ${{ inputs.training_finding || '' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ARTIFACT_NAME: audit-report-${{ github.run_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare audit input
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit-data
+          jq -n \
+            --arg app_url "${APP_URL:-}" \
+            --arg training_finding "${TRAINING_FINDING:-}" \
+            --arg run_url "$RUN_URL" \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg report_path 'audit-data/lighthouse-report.json' \
+            '{
+              app_url: $app_url,
+              training_finding: $training_finding,
+              run_url: $run_url,
+              generated_at: $generated_at,
+              lighthouse_report: $report_path,
+              lighthouse_status: "pending"
+            }' > audit-data/audit-input.json
+
+      - name: Collect Lighthouse report
+        id: lighthouse
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL:-}" ]; then
+            echo 'status=missing_app_url' >> "$GITHUB_OUTPUT"
+            echo 'APP_URL is not set' >&2
+            exit 1
+          fi
+
+          npx --yes lighthouse@12 "$APP_URL" \
+            --output=json \
+            --output-path=audit-data/lighthouse-report.json \
+            --chrome-flags='--headless=new --no-sandbox --disable-dev-shm-usage' \
+            --quiet --max-wait-for-load=90000
+          echo 'status=ok' >> "$GITHUB_OUTPUT"
+
+      - name: Finalize audit input
+        if: always()
+        shell: bash
+        env:
+          LIGHTHOUSE_OUTCOME: ${{ steps.lighthouse.outcome }}
+          LIGHTHOUSE_STATUS: ${{ steps.lighthouse.outputs.status }}
+        run: |
+          set -euo pipefail
+          status='no_data'
+          reason='lighthouse_failed'
+          if [ "$LIGHTHOUSE_OUTCOME" = 'success' ] && [ -s audit-data/lighthouse-report.json ]; then
+            status='ok'
+            reason=''
+          elif [ "$LIGHTHOUSE_STATUS" = 'missing_app_url' ]; then
+            reason='missing_app_url'
+          elif [ ! -s audit-data/lighthouse-report.json ]; then
+            reason='report_missing_or_app_unavailable'
+          fi
+
+          STATUS="$status" REASON="$reason" node -e '
+            const fs = require("fs");
+            const path = "audit-data/audit-input.json";
+            const data = JSON.parse(fs.readFileSync(path, "utf8"));
+            data.lighthouse_status = process.env.STATUS;
+            data.lighthouse_reason = process.env.REASON;
+            data.lighthouse_outcome = process.env.LIGHTHOUSE_OUTCOME;
+            data.run_url = process.env.RUN_URL;
+            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+          '
+
+          if [ "$status" != 'ok' ]; then
+            jq -n --arg status "$status" --arg reason "$reason" \
+              '{error: "no lighthouse data", status: $status, reason: $reason}' \
+              > audit-data/lighthouse-report.json
+          fi
+
+      - name: Run OpenCode audit
+        id: agent
+        if: always()
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_URL: ${{ vars.APP_URL }}
+          TRAINING_FINDING: ${{ inputs.training_finding || '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          model: opencode/big-pickle
+          share: 'true'
+          use_github_token: 'true'
+          prompt: |
+            Ты выполняешь регулярный аудит работающего приложения. Это scheduled/workflow_dispatch запуск: не комментируй issue/PR, не меняй код, не коммить и не пушь.
+
+            Входные данные:
+            - адрес приложения: переменная окружения APP_URL (не хардкодь адрес);
+            - Lighthouse JSON: audit-data/lighthouse-report.json;
+            - метаданные прогона: audit-data/audit-input.json;
+            - учебная находка ручного запуска: переменная окружения TRAINING_FINDING (может быть пустой);
+            - ссылка на прогон: RUN_URL; артефакт прогона: ARTIFACT_NAME (доступен со страницы прогона).
+
+            Порядок работы:
+            1. Прочитай audit-data/audit-input.json и audit-data/lighthouse-report.json. Если lighthouse_status != "ok" или данных нет, зафиксируй статус «нет данных». Не трактуй отсутствие данных как «дефект исправлен» и не создавай issue с утверждением о дефекте приложения.
+            2. Сформируй список находок. Включай только то, что видно в отчёте. Если TRAINING_FINDING непустой, добавь отдельную учебную находку с её точным текстом и явно пометь её как «учебная находка, не подтверждённый дефект».
+            3. Перед созданием issue проверь дубли: `gh issue list --state all --search '<ключевые слова или точный текст находки>' --json number,title,state,url`. Для учебной находки используй её точный текст как поисковый ключ и просмотри найденные задачи. Также проверь открытые PR по той же теме: `gh pr list --state all --search '<ключевые слова>'`.
+            4. Если дубль найден и новых сведений нет, не создавай ни issue, ни комментарий; зафиксируй ссылку на существующую задачу в выводе.
+            5. Если дубля нет и находка есть, создай отдельный issue через `gh issue create`. В теле укажи: описание проблемы, предлагаемое действие, адрес приложения из APP_URL, ссылку на прогон RUN_URL и имя артефакта ARTIFACT_NAME. Для учебной находки добавь пометку «учебная находка, не подтверждённый дефект» и включи её точный текст в заголовок. Не ставь метку `ready-for-agent`: решение о разработке принимает человек.
+            6. Запиши итог в audit-data/audit-output.md в рабочей директории: время UTC, APP_URL, статус данных, список находок или явное «находок нет», для каждой находки — решение (создан issue / найден дубль / нет данных / пропущено) и ссылка на issue или прогон. Не коммить отчёты и не меняй код.
+
+            Ограничения: используй только `gh`, чтение репозитория и файлов отчёта; не исследуй внутренние пути раннера и экшена; не создавай PR; если уверенности в реальности проблемы нет, опиши неопределённость в audit-data/audit-output.md и не создавай issue.
+
+      - name: Publish audit summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Аудит приложения'
+            echo
+            if [ -s audit-data/audit-output.md ]; then
+              cat audit-data/audit-output.md
+            else
+              echo 'Агент не оставил `audit-data/audit-output.md`; см. логи шага Run OpenCode.'
+            fi
+            echo
+            echo "Прогон: $RUN_URL"
+            echo "Артефакт: $ARTIFACT_NAME (доступен со страницы прогона)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            audit-data/lighthouse-report.json
+            audit-data/audit-input.json
+            audit-data/audit-output.md
