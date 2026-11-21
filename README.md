@@ -102,6 +102,18 @@ docker run --rm -p 3000:3000 -e PORT=3000 booking-service
 
 Данные хранятся в памяти процесса и **сбрасываются при каждом перезапуске** — в том числе при рестарте сервиса после сна и при выкате новой версии. Постоянного хранилища в проекте нет (ADR-0002).
 
+## Агент в GitHub Actions
+
+Основной воркфлоу — `.github/workflows/opencode.yml`. Он срабатывает на события `issue_comment` и `pull_request_review_comment` с типом `created`: комментарий к задаче, к обсуждению PR или к строке diff. Команда вызова — `/oc` или `/opencode` (`mentions: /opencode,/oc`). Агент запускается только для доверенных авторов (`OWNER`, `MEMBER`, `COLLABORATOR`, не бот); комментарии ботов и PR из forks секрет модели не получают.
+
+- **Модель:** `opencode/deepseek-v4.1-flash`. Ключ лежит в секрете репозитория `OPENCODE_API_KEY` (пространство OpenCode `Hexlet Students`).
+- **Сессии:** `share: true` — публичные, это решение принято до первого вызова.
+- **Авторизация:** стандартный режим GitHub App через OIDC. Воркфлоу имеет `contents: read` и `id-token: write`, `actions/checkout` использует `persist-credentials: false`; комментарии и push делает приложение.
+- **Ограничения:** `timeout-minutes: 15`, `concurrency` по номеру issue/PR, устаревшие запуски не отменяются (`cancel-in-progress: false`), чтобы не расходовать попытки зря.
+- **Настройки агента:** скиллы `to-spec`, `to-tickets`, `implement-spec` и `triage` доступны из `.agents/skills/`; трекер описан в `docs/agents/issue-tracker.md`, правила — в `AGENTS.md`.
+
+Результат виден в обсуждении issue/PR (ответ агента, коммиты и PR) и на вкладке **Actions → opencode**.
+
 ---
 
 <details>
