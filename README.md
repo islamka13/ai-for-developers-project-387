@@ -104,12 +104,17 @@ docker run --rm -p 3000:3000 -e PORT=3000 booking-service
 
 ## Агент в GitHub Actions
 
-Основной воркфлоу — `.github/workflows/opencode.yml`. Он срабатывает на события `issue_comment` и `pull_request_review_comment` с типом `created`: комментарий к задаче, к обсуждению PR или к строке diff. Команда вызова — `/oc` или `/opencode` (`mentions: /opencode,/oc`). Агент запускается только для доверенных авторов (`OWNER`, `MEMBER`, `COLLABORATOR`, не бот); комментарии ботов и PR из forks секрет модели не получают.
+Основной воркфлоу — `.github/workflows/opencode.yml`. У него две job:
 
-- **Модель:** `opencode/big-pickle` (бесплатная модель консоли OpenCode). Ключ лежит в секрете репозитория `OPENCODE_API_KEY` (пространство OpenCode `Hexlet Students`).
+- `opencode` — ручной вызов комментарием `/oc` или `/opencode` (`mentions: /opencode,/oc`) на событиях `issue_comment` и `pull_request_review_comment` с типом `created`: комментарий к задаче, к обсуждению PR или к строке diff.
+- `triage` — автоматический предварительный разбор новых обращений на событии `issues` (`types: [opened]`). Инструкция лежит в `prompt` job, потому что у этого события нет комментария с командой.
+
+Агент запускается только для доверенных авторов (`OWNER`, `MEMBER`, `COLLABORATOR`, не бот); комментарии ботов и PR из forks секрет модели не получают. Автотриаж дополнительно пропускает уже подготовленные тикеты: issue с метками `ready-for-agent` или `ready-for-human` (их создаёт `to-tickets`) повторно не разбирается.
+
+- **Модель:** `opencode/big-pickle` (бесплатная модель консоли OpenCode). Ключ лежит в секрете репозитория `OPENCODE_API_KEY` (пространство OpenCode `Hexlet Students`). Набор доступных моделей задаётся в консоли (`Console → workspace → Models`), а конкретная модель для агента фиксируется в репозитории: `model:` в воркфлоу и `small_model` в `opencode.json`. В локальном TUI модель выбирается командой `/models`.
 - **Сессии:** `share: true` — публичные, это решение принято до первого вызова.
 - **Авторизация:** стандартный режим GitHub App через OIDC. Воркфлоу имеет `contents: read` и `id-token: write`, `actions/checkout` использует `persist-credentials: false`; комментарии и push делает приложение.
-- **Ограничения:** `timeout-minutes: 15`, `concurrency` по номеру issue/PR, устаревшие запуски не отменяются (`cancel-in-progress: false`), чтобы не расходовать попытки зря.
+- **Ограничения:** `timeout-minutes: 15` для ручного вызова и `10` для автотриажа, общий `concurrency` по номеру issue/PR, устаревшие запуски не отменяются (`cancel-in-progress: false`), чтобы не расходовать попытки зря.
 - **Настройки агента:** скиллы `to-spec`, `to-tickets`, `implement-spec` и `triage` доступны из `.agents/skills/`; трекер описан в `docs/agents/issue-tracker.md`, правила — в `AGENTS.md`.
 - **Конфиг `opencode.json`:** формат OpenCode V1 (в Actions сейчас 1.19.6). `small_model` явно выставлен в `opencode/big-pickle`, иначе для заголовка сессии берётся недоступный `gpt-5.4-nano` (403). Внешние каталоги разрешены общим правилом `external_directory: allow`: точечные исключения для путей раннера не спасают, когда агент исследует внутренности экшена, и в неинтерактивном раннере это выглядело как зависание; `bash` в этом воркфлоу и так разрешён на `*`. `doom_loop` запрещён.
 
