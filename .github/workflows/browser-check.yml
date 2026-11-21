@@ -1,0 +1,74 @@
+name: browser-check
+
+on:
+  workflow_dispatch:
+    inputs:
+      head_sha:
+        description: 'Точный SHA PR, который нужно проверить'
+        required: true
+        type: string
+      pr_number:
+        description: 'Номер PR для отчёта'
+        required: false
+        type: string
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install tools
+        uses: jdx/mise-action@v3
+
+      - name: Confirm checked out SHA
+        run: |
+          ACTUAL=$(git rev-parse HEAD)
+          echo "$ACTUAL" > actual-sha.txt
+          echo "Requested: ${{ inputs.head_sha }}"
+          echo "Actual:    $ACTUAL"
+          test "$ACTUAL" = "${{ inputs.head_sha }}"
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser scenarios with trace
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+        run: |
+          set +e
+          npx playwright test --trace on --reporter=json > playwright-output.txt 2>&1
+          echo $? > exit-code.txt
+          set -e
+
+      - name: Save verification metadata
+        run: |
+          {
+            echo "head_sha=${{ inputs.head_sha }}"
+            echo "actual_sha=$(cat actual-sha.txt)"
+            echo "exit_code=$(cat exit-code.txt)"
+            echo "pr_number=${{ inputs.pr_number }}"
+          } > result.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-${{ inputs.head_sha }}
+          path: |
+            result.txt
+            actual-sha.txt
+            exit-code.txt
+            playwright-output.txt
+            results.json
+            test-results/**
+            playwright-report/**
+          if-no-files-found: warn
