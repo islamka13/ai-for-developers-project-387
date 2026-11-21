@@ -29,6 +29,9 @@ jobs:
       - name: Install tools
         uses: jdx/mise-action@v3
 
+      - name: Install dependencies
+        run: mise run install
+
       - name: Confirm checked out SHA
         run: |
           ACTUAL=$(git rev-parse HEAD)
@@ -72,3 +75,7 @@ jobs:
             test-results/**
             playwright-report/**
           if-no-files-found: warn
+
+      - name: Fail when browser scenarios fail
+        if: always()
+        run: test "$(cat exit-code.txt)" = 0
