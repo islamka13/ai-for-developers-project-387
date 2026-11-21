@@ -15,5 +15,10 @@ export interface UpcomingBooking {
   /** Старт слота: ISO 8601 с offset зоны владельца. */
   start: string;
   guestName: string;
+  /**
+     * Тема разговора гостя, до 200 символов.
+     * @maxLength 200
+     */
+  topic?: string;
   eventType: EventTypeSummary;
 }

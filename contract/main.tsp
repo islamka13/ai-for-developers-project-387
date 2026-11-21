@@ -70,6 +70,10 @@ model Booking {
 
   @minLength(1)
   guestName: string;
+
+  /** Тема разговора гостя, до 200 символов. */
+  @maxLength(200)
+  topic?: string;
 }
 
 /** Данные для создания бронирования гостем. */
@@ -81,6 +85,10 @@ model CreateBooking {
 
   @minLength(1)
   guestName: string;
+
+  /** Тема разговора гостя, до 200 символов. */
+  @maxLength(200)
+  topic?: string;
 }
 
 /** Созданное бронирование. */
@@ -102,6 +110,11 @@ model UpcomingBooking {
   /** Старт слота: ISO 8601 с offset зоны владельца. */
   start: offsetDateTime;
   guestName: string;
+
+  /** Тема разговора гостя, до 200 символов. */
+  @maxLength(200)
+  topic?: string;
+
   eventType: EventTypeSummary;
 }
 

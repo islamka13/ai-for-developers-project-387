@@ -34,6 +34,7 @@ async (c: BookingsListBookingsContext) => {
             eventTypeId: booking.eventTypeId,
             start: toOwnerIso(booking.start),
             guestName: booking.guestName,
+            ...(booking.topic ? { topic: booking.topic } : {}),
             eventType: {
               id: eventType.id,
               title: eventType.title,

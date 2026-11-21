@@ -176,6 +176,10 @@ components:
         guestName:
           type: string
           minLength: 1
+        topic:
+          type: string
+          maxLength: 200
+          description: Тема разговора гостя, до 200 символов.
       description: 'Бронирование: слот, занятый гостем.'
     CreateBooking:
       type: object
@@ -193,6 +197,10 @@ components:
         guestName:
           type: string
           minLength: 1
+        topic:
+          type: string
+          maxLength: 200
+          description: Тема разговора гостя, до 200 символов.
       description: Данные для создания бронирования гостем.
     CreateEventType:
       type: object
@@ -305,6 +313,10 @@ components:
           description: 'Старт слота: ISO 8601 с offset зоны владельца.'
         guestName:
           type: string
+        topic:
+          type: string
+          maxLength: 200
+          description: Тема разговора гостя, до 200 символов.
         eventType:
           $ref: '#/components/schemas/EventTypeSummary'
       description: Бронирование с данными типа встречи для страницы владельца.

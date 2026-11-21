@@ -7,6 +7,7 @@ export interface Booking {
   start: Date
   durationMinutes: number
   guestName: string
+  topic?: string
 }
 
 /**

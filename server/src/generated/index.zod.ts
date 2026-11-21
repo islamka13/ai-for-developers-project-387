@@ -6,12 +6,17 @@
  */
 import * as zod from 'zod';
 
+export const bookingsListBookingsResponseBookingsItemTopicMax = 200;
+
+
+
 export const BookingsListBookingsResponse = zod.object({
   "bookings": zod.array(zod.object({
   "id": zod.string(),
   "eventTypeId": zod.string(),
   "start": zod.iso.datetime({"offset":true}).describe('Старт слота: ISO 8601 с offset зоны владельца.'),
   "guestName": zod.string(),
+  "topic": zod.string().max(bookingsListBookingsResponseBookingsItemTopicMax).optional().describe('Тема разговора гостя, до 200 символов.'),
   "eventType": zod.object({
   "id": zod.string(),
   "title": zod.string(),
@@ -22,14 +27,19 @@ export const BookingsListBookingsResponse = zod.object({
 
 
 
+export const bookingsCreateBookingBodyTopicMax = 200;
+
 
 
 export const BookingsCreateBookingBody = zod.object({
   "eventTypeId": zod.string(),
   "start": zod.iso.datetime({"offset":true}).describe('Старт слота: ISO 8601 с offset зоны владельца.'),
-  "guestName": zod.string().min(1)
+  "guestName": zod.string().min(1),
+  "topic": zod.string().max(bookingsCreateBookingBodyTopicMax).optional().describe('Тема разговора гостя, до 200 символов.')
 }).describe('Данные для создания бронирования гостем.')
 
+
+export const bookingsCreateBookingResponseBookingTopicMax = 200;
 
 
 
@@ -38,7 +48,8 @@ export const BookingsCreateBookingResponse = zod.object({
   "id": zod.string().describe('Идентификатор генерирует сервер.'),
   "eventTypeId": zod.string(),
   "start": zod.iso.datetime({"offset":true}).describe('Старт слота: ISO 8601 с offset зоны владельца.'),
-  "guestName": zod.string().min(1)
+  "guestName": zod.string().min(1),
+  "topic": zod.string().max(bookingsCreateBookingResponseBookingTopicMax).optional().describe('Тема разговора гостя, до 200 символов.')
 }).describe('Бронирование: слот, занятый гостем.')
 }).describe('Созданное бронирование.')
 
