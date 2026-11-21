@@ -190,6 +190,7 @@ export function AdminPage() {
                 <p className="font-medium">{formatBookingTime(booking)}</p>
                 <p className="text-muted-foreground text-sm">{booking.eventType.title}</p>
                 <p className="text-sm">{booking.guestName}</p>
+                {booking.topic && <p className="text-sm text-muted-foreground">{booking.topic}</p>}
               </li>
             ))}
           </ul>
