@@ -14,4 +14,9 @@ export interface CreateBooking {
   start: string;
   /** @minLength 1 */
   guestName: string;
+  /**
+     * Тема разговора гостя, до 200 символов.
+     * @maxLength 200
+     */
+  topic?: string;
 }
