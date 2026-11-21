@@ -30,7 +30,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      actions: write
+      actions: read
       issues: write
       pull-requests: write
     steps:
@@ -40,9 +40,10 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # The counter is a repository Actions variable: the agent's OIDC token has
-      # actions: read only, while this step uses the workflow token with write.
-      # Keys are run id + attempt, so a rerun or a timed-out run also costs a slot.
+      # The counter is Actions history: neither the workflow token nor the agent
+      # token can rewrite past runs. issue_comment runs do not expose pull_requests,
+      # so match the PR title as well; skipped runs are the agent's own replies.
+      # run_attempt makes a Re-run consume a slot too.
       - name: Check PR request budget
         id: budget
         if: github.event.issue.pull_request != null || github.event_name == 'pull_request_review_comment'
@@ -55,34 +56,22 @@ jobs:
             const prNumber = context.payload.issue?.number ?? context.payload.pull_request?.number;
             const { owner, repo } = context.repo;
             const limit = 3;
-            const name = `PR_${prNumber}_OPENCODE_ATTEMPTS`;
-            const current = context.payload.pull_request
-              ? { data: context.payload.pull_request }
-              : await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
-            let store = {};
-            try {
-              const { data } = await github.rest.actions.getRepoVariable({ owner, repo, name });
-              store = JSON.parse(data.value || '{}');
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            const attempts = Object.keys(store).length + 1;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, workflow_id: 'opencode.yml', per_page: 100,
+            });
+            const prior = runs.filter((run) =>
+              run.id !== context.runId &&
+              (run.event === 'issue_comment' || run.event === 'pull_request_review_comment') &&
+              run.conclusion !== 'skipped' &&
+              (run.display_title === pr.title ||
+               (run.pull_requests || []).some((p) => p.number === prNumber)));
+            const attempts = prior.reduce((sum, run) => sum + (run.run_attempt || 1), 0) + Number(process.env.RUN_ATTEMPT || 1);
             const allowed = attempts <= limit;
-            if (allowed) {
-              const key = `${context.runId}:${process.env.RUN_ATTEMPT || 1}`;
-              store[key] = 1;
-              const value = JSON.stringify(store);
-              try {
-                await github.rest.actions.updateVariable({ owner, repo, name, value });
-              } catch (error) {
-                if (error.status !== 404) throw error;
-                await github.rest.actions.createRepoVariable({ owner, repo, name, value });
-              }
-            }
             core.setOutput('allowed', String(allowed));
             core.setOutput('attempts', String(attempts));
             core.setOutput('limit', String(limit));
-            core.setOutput('head_sha', current.data.head.sha);
+            core.setOutput('head_sha', pr.head.sha);
             core.info(`PR #${prNumber}: attempt ${attempts}/${limit}, allowed=${allowed}`);
 
       - name: Run OpenCode
