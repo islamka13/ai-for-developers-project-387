@@ -31,6 +31,10 @@ export type Booking = {
      */
     start: string;
     guestName: string;
+    /**
+     * Тема разговора гостя, до 200 символов.
+     */
+    topic?: string;
 };
 
 /**
@@ -43,6 +47,10 @@ export type CreateBooking = {
      */
     start: string;
     guestName: string;
+    /**
+     * Тема разговора гостя, до 200 символов.
+     */
+    topic?: string;
 };
 
 /**
@@ -115,6 +123,10 @@ export type UpcomingBooking = {
      */
     start: string;
     guestName: string;
+    /**
+     * Тема разговора гостя, до 200 символов.
+     */
+    topic?: string;
     eventType: EventTypeSummary;
 };
 

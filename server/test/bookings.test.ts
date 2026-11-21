@@ -44,10 +44,11 @@ type BookingBody = {
   eventTypeId: string
   start: string
   guestName: string
+  topic?: string
 }
 
 type CreatedBody = {
-  booking: { id: string; eventTypeId: string; start: string; guestName: string }
+  booking: { id: string; eventTypeId: string; start: string; guestName: string; topic?: string }
 }
 
 type ErrorBody = {
@@ -89,6 +90,57 @@ describe('POST /api/bookings', () => {
     const slotsResponse = await app.request('/api/event-types/1/slots?date=2026-11-23')
     const slots = (await slotsResponse.json()) as { slots: string[] }
     expect(slots.slots).not.toContain('2026-11-23T09:00:00+05:00')
+  })
+
+  it('не возвращает тему, когда гость её не указал', async () => {
+    freezeNow('2026-11-22T05:20:00Z')
+
+    const { status, body } = await postBooking(validBooking)
+
+    expect(status).toBe(201)
+    expect(body.booking).not.toHaveProperty('topic')
+  })
+
+  it.each(['', '   \t '])('трактует тему %j как отсутствие', async (topic) => {
+    freezeNow('2026-11-22T05:20:00Z')
+
+    const { status, body } = await postBooking({ ...validBooking, topic })
+
+    expect(status).toBe(201)
+    expect(body.booking).not.toHaveProperty('topic')
+  })
+
+  it.each([
+    { name: 'обычную тему', topic: 'Обсуждение дизайна' },
+    { name: 'тему длиной ровно 200 символов', topic: 'т'.repeat(200) },
+  ])('сохраняет и возвращает $name в ответе на создание бронирования', async ({ topic }) => {
+    freezeNow('2026-11-22T05:20:00Z')
+
+    const { status, body } = await postBooking({ ...validBooking, topic })
+
+    expect(status).toBe(201)
+    expect(body.booking?.topic).toBe(topic)
+
+    const slotsResponse = await app.request('/api/event-types/1/slots?date=2026-11-23')
+    const slots = (await slotsResponse.json()) as { slots: string[] }
+    expect(slots.slots).not.toContain('2026-11-23T09:00:00+05:00')
+  })
+
+  it('отвергает тему длиннее 200 символов до создания бронирования и оставляет слот свободным', async () => {
+    freezeNow('2026-11-22T05:20:00Z')
+
+    const { status, body } = await postBooking({
+      ...validBooking,
+      topic: 'x'.repeat(201),
+    })
+
+    expect(status).toBe(400)
+    expect(body.error.code).toBe('validation_error')
+    expect(body.error.details?.topic).toEqual(expect.any(String))
+
+    const slotsResponse = await app.request('/api/event-types/1/slots?date=2026-11-23')
+    const slots = (await slotsResponse.json()) as { slots: string[] }
+    expect(slots.slots).toContain('2026-11-23T09:00:00+05:00')
   })
 
   it('отвергает старт вне сетки 30 минут', async () => {

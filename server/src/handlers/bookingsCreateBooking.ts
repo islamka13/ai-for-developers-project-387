@@ -60,12 +60,14 @@ async (c: BookingsCreateBookingContext) => {
       )
     }
 
+    const topic = body.topic?.trim() ? body.topic : undefined
     const booking = {
       id: crypto.randomUUID(),
       eventTypeId: body.eventTypeId,
       start: new Date(body.start),
       durationMinutes: eventType.durationMinutes,
       guestName: body.guestName,
+      topic,
     }
     if (!bookingRepository.tryAdd(booking)) {
       return c.json(
@@ -86,6 +88,7 @@ async (c: BookingsCreateBookingContext) => {
           eventTypeId: booking.eventTypeId,
           start: body.start,
           guestName: booking.guestName,
+          ...(booking.topic ? { topic: booking.topic } : {}),
         },
       },
       201,

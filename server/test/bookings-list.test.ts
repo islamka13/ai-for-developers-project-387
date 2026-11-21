@@ -38,6 +38,7 @@ async function getBookings() {
         eventTypeId: string
         start: string
         guestName: string
+        topic?: string
         eventType: { id: string; title: string; durationMinutes: number }
       }>
     },
@@ -83,6 +84,32 @@ describe('GET /api/bookings', () => {
       title: 'Консультация',
       durationMinutes: 60,
     })
+  })
+
+  it('показывает тему разговора только у встреч, где она указана', async () => {
+    clock.now = () => new Date('2026-11-22T05:20:00Z')
+    bookingRepository.add({
+      id: 'with-topic',
+      eventTypeId: '1',
+      start: new Date('2026-11-23T09:00:00+05:00'),
+      durationMinutes: 30,
+      guestName: 'Аня',
+      topic: 'Обсуждение дизайна',
+    })
+    bookingRepository.add({
+      id: 'without-topic',
+      eventTypeId: '2',
+      start: new Date('2026-11-24T11:00:00+05:00'),
+      durationMinutes: 60,
+      guestName: 'Игорь',
+    })
+
+    const { status, body } = await getBookings()
+
+    expect(status).toBe(200)
+    expect(body.bookings.map((booking) => booking.id)).toEqual(['with-topic', 'without-topic'])
+    expect(body.bookings[0].topic).toBe('Обсуждение дизайна')
+    expect(body.bookings[1]).not.toHaveProperty('topic')
   })
 
   it('пустое состояние: список встреч пуст', async () => {
