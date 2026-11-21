@@ -1,0 +1,84 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Agent PRs must be reviewed too, so there is no global Bot filter here.
+    # Only same-repo branches and trusted authors are allowed to spend the model key.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       github.event.pull_request.user.login == 'opencode-agent[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Prepare review context
+        run: |
+          {
+            echo '## Pull request'
+            gh pr view "$PR_NUMBER" --json title,body --jq '.title + "\n" + .body'
+            echo '## Diff'
+            git diff "$BASE_SHA" "$HEAD_SHA" -- . ':!web/src/client' ':!server/src/generated' ':!contract/openapi.yaml'
+            echo '## CI check runs'
+            gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '.check_runs[] | [.name, .status, .conclusion] | @tsv' || true
+            echo '## Spec #6'
+            gh issue view 6 -R "$GITHUB_REPOSITORY" --json body --jq .body
+            echo '## Tickets #7, #8'
+            gh issue view 7 -R "$GITHUB_REPOSITORY" --json body --jq .body
+            gh issue view 8 -R "$GITHUB_REPOSITORY" --json body --jq .body
+            echo '## Human confirmation in #5'
+            gh issue view 5 -R "$GITHUB_REPOSITORY" --json comments --jq '.comments[] | select(.body | startswith("Подтверждаю согласованный объём")) | .body'
+          } > review-context.txt
+
+      - name: Write review instructions
+        run: |
+          cat > review-prompt.txt <<'PROMPT'
+          Ты — независимый ревьюер pull request. Не меняй файлы, не запускай команды изменения PR и не публикуй комментарии: твоя задача — только вернуть текст ревью.
+
+          Прочитай `REVIEW.md` и `review-context.txt`. В контексте есть diff, статусы CI, спецификация из issue #6, тикеты #7 и #8 и комментарий согласования человеком из issue #5.
+
+          Проверь, что изменение PR укладывается в согласованный объём, что основной и негативный сценарии спецификации покрыты тестами и что не нарушены критерии из `REVIEW.md`. Сверяй поведение со ссылками на issue, а не только с текстом diff. Если ссылки недоступны или изменение выходит за согласованный объём, отметь этот пробел.
+
+          Каждое замечание: файл, строка или место в diff, условие ошибки и последствие. Если подтверждённых дефектов нет, напиши об этом прямо. Форматирование проверяет линтер — его вывод не повторяй.
+
+          Верни готовый текст ревью на русском языке, без служебных preface и без описания своих действий.
+          PROMPT
+
+      - name: Run independent reviewer
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_CONFIG_CONTENT: '{"tools":{"write":false,"edit":false,"bash":false},"mcp":{"servers":{}},"small_model":"opencode/big-pickle"}'
+        run: |
+          npx -y opencode-ai@1.19.6 run --model opencode/big-pickle --auto "$(cat review-prompt.txt)" > review.md
+          test -s review.md
+
+      - name: Publish review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment "$PR_NUMBER" --body-file review.md
