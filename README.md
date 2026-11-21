@@ -111,6 +111,7 @@ docker run --rm -p 3000:3000 -e PORT=3000 booking-service
 - **Авторизация:** стандартный режим GitHub App через OIDC. Воркфлоу имеет `contents: read` и `id-token: write`, `actions/checkout` использует `persist-credentials: false`; комментарии и push делает приложение.
 - **Ограничения:** `timeout-minutes: 15`, `concurrency` по номеру issue/PR, устаревшие запуски не отменяются (`cancel-in-progress: false`), чтобы не расходовать попытки зря.
 - **Настройки агента:** скиллы `to-spec`, `to-tickets`, `implement-spec` и `triage` доступны из `.agents/skills/`; трекер описан в `docs/agents/issue-tracker.md`, правила — в `AGENTS.md`.
+- **Конфиг `opencode.json`:** формат OpenCode V1 (в Actions сейчас 1.19.6). `small_model` явно выставлен в `opencode/deepseek-v4.1-flash`, иначе для заголовка сессии берётся недоступный `gpt-5.4-nano` (403). Разрешён внешний путь события `/github/workflow/*` — без этого агент ждёт подтверждения `external_directory` и зависает в неинтерактивном раннере; `doom_loop` запрещён по той же причине.
 
 Результат виден в обсуждении issue/PR (ответ агента, коммиты и PR) и на вкладке **Actions → opencode**.
 
