@@ -19,10 +19,11 @@ test('гость записывается на слот, владелец вид
   await slot.click()
 
   await page.getByLabel('Имя гостя').fill('Е2E Гость')
+  await page.getByLabel('Тема разговора').fill('Обсуждение дизайна')
   await page.getByRole('button', { name: 'Записаться' }).click()
-  await expect(page.getByRole('region', { name: 'Подтверждение записи' })).toContainText(
-    'Е2E Гость',
-  )
+  const confirmation = page.getByRole('region', { name: 'Подтверждение записи' })
+  await expect(confirmation).toContainText('Е2E Гость')
+  await expect(confirmation).not.toContainText('Обсуждение дизайна')
 
   // Повторная попытка занять тот же слот (ещё видимый в календаре) отклоняется сервером.
   await page.getByRole('button', { name: 'Записаться на другое время' }).click()
@@ -38,4 +39,5 @@ test('гость записывается на слот, владелец вид
   const upcoming = page.getByRole('region', { name: 'Предстоящие встречи' })
   await expect(upcoming).toContainText('Е2E Гость')
   await expect(upcoming).toContainText('Знакомство')
+  await expect(upcoming).toContainText('Обсуждение дизайна')
 })
