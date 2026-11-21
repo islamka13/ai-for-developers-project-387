@@ -50,13 +50,18 @@ function stubCatalogAndSlots(bookingResponse?: StubResponse) {
   })
 }
 
-async function selectSlotAndFillName() {
+async function selectSlotAndFillName(topic?: string) {
   render(<BookingPage />)
   fireEvent.click(await screen.findByRole('button', { name: /Знакомство/ }))
   fireEvent.click(await screen.findByRole('button', { name: '09:00' }))
   fireEvent.change(await screen.findByLabelText('Имя гостя'), {
     target: { value: 'Аня' },
   })
+  if (topic !== undefined) {
+    fireEvent.change(await screen.findByLabelText('Тема разговора'), {
+      target: { value: topic },
+    })
+  }
 }
 
 afterEach(() => {
@@ -79,6 +84,54 @@ describe('Страница записи: бронирование слота', (
       start: '2026-11-23T09:00:00+05:00',
       guestName: 'Аня',
     })
+  })
+
+  it('отправляет тему разговора до 200 символов в теле бронирования', async () => {
+    const seen = stubCatalogAndSlots()
+    const topic = 'а'.repeat(200)
+
+    await selectSlotAndFillName(topic)
+    expect(screen.getByLabelText('Тема разговора')).toHaveAttribute('maxlength', '200')
+    expect(screen.getByText(/до 200 символов/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Записаться' }))
+
+    await screen.findByRole('region', { name: 'Подтверждение записи' })
+    const post = seen.find((request) => request.method === 'POST')
+    expect(post?.body).toMatchObject({ topic })
+  })
+
+  it('не отправляет тему разговора, если поле пустое', async () => {
+    const seen = stubCatalogAndSlots()
+
+    await selectSlotAndFillName('')
+    fireEvent.click(screen.getByRole('button', { name: 'Записаться' }))
+
+    await screen.findByRole('region', { name: 'Подтверждение записи' })
+    const post = seen.find((request) => request.method === 'POST')
+    expect(post?.body).not.toHaveProperty('topic')
+  })
+
+  it('не отправляет тему разговора, если она состоит только из пробелов', async () => {
+    const seen = stubCatalogAndSlots()
+
+    await selectSlotAndFillName('  \t  ')
+    fireEvent.click(screen.getByRole('button', { name: 'Записаться' }))
+
+    await screen.findByRole('region', { name: 'Подтверждение записи' })
+    const post = seen.find((request) => request.method === 'POST')
+    expect(post?.body).not.toHaveProperty('topic')
+  })
+
+  it('не показывает тему разговора в подтверждении записи', async () => {
+    const topic = 'Обсуждение резюме'
+    stubCatalogAndSlots()
+
+    await selectSlotAndFillName(topic)
+    fireEvent.click(screen.getByRole('button', { name: 'Записаться' }))
+
+    const confirmation = await screen.findByRole('region', { name: 'Подтверждение записи' })
+    expect(confirmation).not.toHaveTextContent(topic)
+    expect(confirmation).not.toHaveTextContent('Тема разговора')
   })
 
   it('при конфликте показывает сообщение и оставляет гостя на календаре', async () => {

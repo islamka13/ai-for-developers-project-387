@@ -24,6 +24,7 @@ function describeError(error: unknown): string {
 
 export function BookingForm({ eventType, slot, onSuccess, onError }: BookingFormProps) {
   const [guestName, setGuestName] = useState('')
+  const [topic, setTopic] = useState('')
   const [sending, setSending] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -31,7 +32,12 @@ export function BookingForm({ eventType, slot, onSuccess, onError }: BookingForm
     onError(null)
     setSending(true)
     const { data, error } = await bookingsCreateBooking({
-      body: { eventTypeId: eventType.id, start: slot, guestName },
+      body: {
+        eventTypeId: eventType.id,
+        start: slot,
+        guestName,
+        ...(topic.trim() ? { topic } : {}),
+      },
     })
     setSending(false)
     if (error || !data) {
@@ -55,6 +61,17 @@ export function BookingForm({ eventType, slot, onSuccess, onError }: BookingForm
         required
         className="rounded-md border px-3 py-2"
       />
+      <label htmlFor="topic" className="text-sm font-medium">
+        Тема разговора
+      </label>
+      <input
+        id="topic"
+        value={topic}
+        onChange={(event) => setTopic(event.target.value)}
+        maxLength={200}
+        className="rounded-md border px-3 py-2"
+      />
+      <p className="text-muted-foreground text-sm">Необязательно, до 200 символов</p>
       <button
         type="submit"
         disabled={sending}

@@ -124,6 +124,7 @@ type UpcomingBooking = {
   eventTypeId: string
   start: string
   guestName: string
+  topic?: string
   eventType: { id: string; title: string; durationMinutes: number }
 }
 
@@ -158,6 +159,79 @@ describe('Страница владельца: предстоящие встре
     expect(within(section).getByText(/UTC\+5/)).toBeInTheDocument()
     expect(within(section).getByText('Знакомство')).toBeInTheDocument()
     expect(within(section).getByText('Аня')).toBeInTheDocument()
+  })
+
+  it('показывает тему разговора только у нужной встречи и не добавляет текст встречам без темы', async () => {
+    stubBookingsApi([
+      {
+        id: 'b1',
+        eventTypeId: '1',
+        start: '2026-11-23T09:00:00+05:00',
+        guestName: 'Аня',
+        topic: 'Обсуждение резюме',
+        eventType: { id: '1', title: 'Знакомство', durationMinutes: 30 },
+      },
+      {
+        id: 'b2',
+        eventTypeId: '1',
+        start: '2026-11-23T10:00:00+05:00',
+        guestName: 'Борис',
+        eventType: { id: '1', title: 'Знакомство', durationMinutes: 30 },
+      },
+    ])
+
+    render(<AdminPage />)
+
+    const section = await screen.findByRole('region', { name: 'Предстоящие встречи' })
+    const rows = within(section).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Обсуждение резюме')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Аня')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Борис')).toBeInTheDocument()
+    expect(rows[1]).not.toHaveTextContent('Обсуждение резюме')
+    expect(rows[1]).not.toHaveTextContent(/undefined|null|Тема разговора/)
+  })
+
+  it('сохраняет соответствие разных тем встречам в порядке по времени', async () => {
+    stubBookingsApi([
+      {
+        id: 'b1',
+        eventTypeId: '1',
+        start: '2026-11-23T09:00:00+05:00',
+        guestName: 'Аня',
+        topic: 'Первая тема',
+        eventType: { id: '1', title: 'Знакомство', durationMinutes: 30 },
+      },
+      {
+        id: 'b2',
+        eventTypeId: '1',
+        start: '2026-11-23T10:00:00+05:00',
+        guestName: 'Борис',
+        eventType: { id: '1', title: 'Знакомство', durationMinutes: 30 },
+      },
+      {
+        id: 'b3',
+        eventTypeId: '1',
+        start: '2026-11-23T11:00:00+05:00',
+        guestName: 'Вика',
+        topic: 'Вторая тема',
+        eventType: { id: '1', title: 'Знакомство', durationMinutes: 30 },
+      },
+    ])
+
+    render(<AdminPage />)
+
+    const section = await screen.findByRole('region', { name: 'Предстоящие встречи' })
+    const rows = within(section).getAllByRole('listitem')
+    expect(rows).toHaveLength(3)
+    expect(within(rows[0]).getByText(/09:00/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Первая тема')).toBeInTheDocument()
+    expect(within(rows[1]).getByText(/10:00/)).toBeInTheDocument()
+    expect(rows[1]).not.toHaveTextContent(/Первая тема|Вторая тема/)
+    expect(within(rows[2]).getByText(/11:00/)).toBeInTheDocument()
+    expect(within(rows[2]).getByText('Вторая тема')).toBeInTheDocument()
+    expect(rows[0]).not.toHaveTextContent('Вторая тема')
+    expect(rows[2]).not.toHaveTextContent('Первая тема')
   })
 
   it('показывает понятное пустое состояние', async () => {
