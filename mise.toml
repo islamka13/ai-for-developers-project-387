@@ -1,0 +1,44 @@
+[tools]
+hk = "latest"
+node = "26.13.1"
+
+[settings]
+experimental = true
+
+[tasks.install]
+description = "Установить зависимости npm"
+run = "npm install"
+
+[tasks.dev]
+description = "Запустить dev-серверы бекенда и фронтенда"
+depends = ["install"]
+run = "npm run dev"
+
+[tasks.build]
+description = "Собрать фронтенд и проверить типы бекенда"
+depends = ["install"]
+run = "npm run build"
+
+[tasks.generate]
+description = "Сгенерировать артефакты из контракта (TypeSpec → openapi.yaml → SDK и серверные схемы)"
+depends = ["install"]
+run = "npm run generate"
+
+[tasks.test]
+description = "Запустить тесты"
+depends = ["install"]
+run = "npm test"
+
+[tasks.lint]
+description = "Запустить линтер"
+depends = ["install"]
+run = "npm run lint"
+
+[tasks.typecheck]
+description = "Проверить типы"
+depends = ["install"]
+run = "npm run typecheck"
+
+[tasks.check]
+description = "Все проверки: линтер, типы, тесты"
+depends = ["lint", "typecheck", "test"]

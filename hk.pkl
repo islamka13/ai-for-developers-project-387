@@ -1,0 +1,15 @@
+amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
+
+// Хуки запускают те же проверки, что и CI (mise run check).
+// Шаги без glob — общие команды на весь проект.
+steps = new Mapping {
+    ["lint"] {
+        check = "npm run lint"
+    }
+    ["typecheck"] {
+        check = "npm run typecheck"
+    }
+    ["test"] {
+        check = "npm test"
+    }
+}

@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install tools
+        uses: jdx/mise-action@v3
+
+      - name: Regenerate contract artifacts
+        run: mise run generate
+
+      - name: Fail if generated artifacts drifted
+        run: git diff --exit-code
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run checks
+        run: mise run check

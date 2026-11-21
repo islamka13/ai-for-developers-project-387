@@ -1,0 +1,32 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Сгенерированные артефакты (уточним на шаге контрактной цепочки)
+# api/generated/
+
+# Переменные окружения и секреты
+.env
+.env.*
+!.env.example
+
+# Логи
+*.log
+npm-debug.log*
+
+# OS и редакторы
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Кэши инструментов
+.cache/
+.eslintcache
+coverage/
+playwright-report/
+test-results/
