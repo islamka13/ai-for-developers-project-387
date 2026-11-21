@@ -120,6 +120,10 @@ describe('POST /api/bookings', () => {
 
     expect(status).toBe(201)
     expect(body.booking?.topic).toBe(topic)
+
+    const slotsResponse = await app.request('/api/event-types/1/slots?date=2026-11-23')
+    const slots = (await slotsResponse.json()) as { slots: string[] }
+    expect(slots.slots).not.toContain('2026-11-23T09:00:00+05:00')
   })
 
   it('отвергает тему длиннее 200 символов до создания бронирования и оставляет слот свободным', async () => {
