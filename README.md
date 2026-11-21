@@ -128,6 +128,23 @@ docker run --rm -p 3000:3000 -e PORT=3000 booking-service
 
 Браузерная проверка работающей версии — отдельный `.github/workflows/browser-check.yml` (`workflow_dispatch`). В него передаётся точный head SHA PR; job делает checkout именно этого коммита, ставит зависимости через `mise run install`, явно включает Playwright trace (`--trace on`) и кладёт в артефакт результат, фактический `git rev-parse HEAD`, номер PR и trace. Отдельный шаг после загрузки артефакта делает job провальным при ненулевом коде выхода Playwright — сам по себе успешный запуск workflow не означает, что сценарии прошли. Перед мержем человек сверяет SHA в артефакте с текущим head PR — после нового push проверку нужно повторить.
 
+### Регулярный аудит по расписанию
+
+`.github/workflows/audit-schedule.yml` запускает регулярный аудит работающего приложения. Триггеры: `schedule` с cron `17 6 * * *` и `timezone: Europe/Moscow` (раз в сутки) и `workflow_dispatch` со строковым входом `training_finding` (по умолчанию пустой). У job заданы `timeout-minutes: 30` и `concurrency` с `cancel-in-progress: false`. Фактический запуск по расписанию для сдачи не требуется.
+
+Адрес приложения берётся из переменной репозитория `APP_URL` (`https://booking-service-wdcu.onrender.com`), в YAML не хардкодится. Шаг Lighthouse сохраняет JSON-отчёт; при недоступности приложения статус становится `no_data` и не трактуется как «дефект исправлен».
+
+Агент получает инструкцию через `prompt`, работает с `use_github_token: true` и правами `contents: read` + `issues: write` (без `id-token: write`). Он ищет дубли через `gh issue list --state all --search`, создаёт отдельный issue только по новой находке и пишет итог в `audit-data/audit-output.md`.
+
+Результат доступен в трёх местах: артефакт `audit-report-<run_id>` (исходный Lighthouse JSON, `audit-input.json`, `audit-output.md`), Job summary прогона с текстом вывода агента и issue с конкретной находкой. Ссылка на артефакт одна не достаточна, поэтому вывод продублирован в summary.
+
+Проверенные ручные прогоны из `main`:
+
+- Успешный прогон: [run 44949529704](https://github.com/islamka13/ai-for-developers-project-387/actions/runs/44949529704) (head `2f6dd8f`), артефакт [14725327057](https://github.com/islamka13/ai-for-developers-project-387/actions/runs/44949529704/artifacts/14725327057). Агент создал issue [#14](https://github.com/islamka13/ai-for-developers-project-387/issues/14) (meta description) и [#15](https://github.com/islamka13/ai-for-developers-project-387/issues/15) (robots.txt) по данным Lighthouse, а учебную находку зафиксировал в issue [#13](https://github.com/islamka13/ai-for-developers-project-387/issues/13) с пометкой, что это не подтверждённый дефект.
+- Повторный прогон с той же учебной находкой: [run 44949985386](https://github.com/islamka13/ai-for-developers-project-387/actions/runs/44949985386), артефакт [14724659446](https://github.com/islamka13/ai-for-developers-project-387/actions/runs/44949985386/artifacts/14724659446). Новых issue и комментариев нет: агент нашёл дубли #13/#14/#15 и записал `Создано новых issue: 0`.
+
+Отчёты игнорируются Git через `audit-data/` в `.gitignore` и в коммиты не попадают.
+
 ---
 
 <details>
